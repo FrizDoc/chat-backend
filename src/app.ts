@@ -14,7 +14,7 @@ app.get('/', (req: Request, res: Response) => {
   })
 })
 
-app.use("/api/chats", chatRouter)
+app.use("/chat", chatRouter)
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ message: "Route not found" })

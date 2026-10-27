@@ -1,14 +1,8 @@
 import express from "express"
-import type { Request, Response } from "express"
+import { createOrGetChat } from "../controller/chatController.js"
 
 const chatRouter = express.Router()
 
-chatRouter.post("/", (req: Request, res: Response) => {
-
-})
-
-
-
-
+chatRouter.post("/create", createOrGetChat)
 
 export default chatRouter
