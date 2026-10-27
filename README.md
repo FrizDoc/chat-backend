@@ -32,6 +32,16 @@ npm run db:migrate
 npm run dev
 ```
 
+### With Docker
+
+Fill in the Firebase values in `.env`, then:
+
+```bash
+docker compose up -d --build
+```
+
+This starts Postgres, runs the migrations and starts the app on `http://localhost:${PORT:-4000}`. The `DATABASE_URL` in `.env` is overridden to point at the container. Postgres is exposed on host port `5433` (set `DB_PORT` to change it), so you can connect with `postgres://postgres:postgres@localhost:5433/chat_db`. Data is kept in the `pgdata` volume; `docker compose down -v` wipes it.
+
 There is no signup API, so add a few users yourself to test with:
 
 ```sql
