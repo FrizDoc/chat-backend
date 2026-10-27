@@ -2,13 +2,8 @@ import type { Request, Response } from "express";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { chats, chatMembers, users } from "../db/schema.js";
-import { createMessage, getMessages } from "../services/message.service.js";
-
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const isUuid = (value: unknown): value is string =>
-  typeof value === "string" && UUID_REGEX.test(value);
+import { createMessage, getMessages, markMessageRead } from "../services/message.service.js";
+import { isUuid } from "../utils/validation.js";
 
 export const createOrGetChat = async (req: Request, res: Response) => {
   const { userAId, userBId } = req.body ?? {};
@@ -148,5 +143,32 @@ export const getChatMessages = async (req: Request, res: Response) => {
   } catch (err) {
     console.error("getChatMessages failed", err);
     return res.status(500).json({ message: "Failed to fetch messages" });
+  }
+}
+
+
+const FIRESTORE_ID_REGEX = /^[A-Za-z0-9]{1,128}$/;
+
+export const markChatMessageRead = async (req: Request, res: Response) => {
+  try {
+    const { chatId, messageId } = req.params;
+
+    if (!isUuid(chatId)) {
+      return res.status(400).json({ message: "The chat id must be a valid UUID!" })
+    }
+    if (typeof messageId !== "string" || !FIRESTORE_ID_REGEX.test(messageId)) {
+      return res.status(400).json({ message: "The message id is invalid!" })
+    }
+
+    const result = await markMessageRead(chatId, messageId);
+
+    if (!result) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error("markChatMessageRead failed", err);
+    return res.status(500).json({ message: "Failed to mark message as read" });
   }
 }

@@ -2,6 +2,7 @@ import express from "express"
 import helmet from "helmet"
 import type { Request, Response, NextFunction } from "express"
 import chatRouter from "./routes/chatRoute.js"
+import userRouter from "./routes/userRoute.js"
 
 const app = express()
 
@@ -15,6 +16,7 @@ app.get('/', (req: Request, res: Response) => {
 })
 
 app.use("/chat", chatRouter)
+app.use("/user", userRouter)
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ message: "Route not found" })
