@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { chats, chatMembers, users } from "../db/schema.js";
+import { createMessage, getMessages } from "../services/message.service.js";
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -71,3 +72,81 @@ export const createOrGetChat = async (req: Request, res: Response) => {
 
   return res.status(result.created ? 201 : 200).json({ chatId: result.chatId });
 };
+
+
+export const sendMessage = async (req: Request, res: Response) => {
+  try {
+    const chatId = req.params.chatId
+    const { senderId, text } = req.body ?? {};
+
+    if (!isUuid(chatId)) {
+      return res.status(400).json({ message: "The chat id must be a valid UUID!" })
+    }
+    if (!isUuid(senderId)) {
+      return res.status(400).json({ message: "The sender id must be a valid UUID!" })
+    }
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return res.status(400).json({ message: "The text must be a non empty string" })
+    }
+    const content = text.trim();
+    const [membership] = await db
+      .select({ userId: chatMembers.userId })
+      .from(chatMembers)
+      .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, senderId)))
+      .limit(1);
+
+    if (!membership) {
+      return res.status(403).json({ message: "Sender is not a member of this chat" });
+    }
+
+    const message = await createMessage({ chatId, senderId, content });
+
+    await db
+      .update(chats)
+      .set({ updatedAt: new Date() })
+      .where(eq(chats.id, chatId));
+
+    return res.status(201).json(message);
+  } catch (err) {
+    console.error("sendMessage failed", err);
+    return res.status(500).json({ message: "Failed to send message" });
+  }
+}
+
+const DEFAULT_MESSAGE_LIMIT = 50;
+const MAX_MESSAGE_LIMIT = 100;
+
+export const getChatMessages = async (req: Request, res: Response) => {
+  try {
+    const chatId = req.params.chatId;
+
+    if (!isUuid(chatId)) {
+      return res.status(400).json({ message: "The chat id must be a valid UUID!" })
+    }
+
+    let limit = DEFAULT_MESSAGE_LIMIT;
+    if (req.query.limit !== undefined) {
+      limit = Number(req.query.limit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > MAX_MESSAGE_LIMIT) {
+        return res.status(400).json({ message: `limit must be an integer between 1 and ${MAX_MESSAGE_LIMIT}` })
+      }
+    }
+
+    const [chat] = await db
+      .select({ id: chats.id })
+      .from(chats)
+      .where(eq(chats.id, chatId))
+      .limit(1);
+
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
+    const messages = await getMessages(chatId, limit);
+
+    return res.status(200).json({ messages });
+  } catch (err) {
+    console.error("getChatMessages failed", err);
+    return res.status(500).json({ message: "Failed to fetch messages" });
+  }
+}
