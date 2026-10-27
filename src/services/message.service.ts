@@ -1,3 +1,4 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 
 interface CreateMessageInput {
@@ -62,7 +63,11 @@ export async function getMessages(chatId: string, limit: number) {
     .reverse();
 }
 
-export async function markMessageRead(chatId: string, messageId: string) {
+export async function markMessageRead(
+  chatId: string,
+  messageId: string,
+  userId: string,
+) {
   const messageRef = firestore
     .collection("chats")
     .doc(chatId)
@@ -74,17 +79,67 @@ export async function markMessageRead(chatId: string, messageId: string) {
     if (!snapshot.exists) {
       return null;
     }
-    if (snapshot.get("isRead") === true) {
+
+    const readBy: string[] = snapshot.get("readBy") ?? [];
+    let isRead: boolean = snapshot.get("isRead") === true;
+    let readAt: Date | null = snapshot.get("readAt")?.toDate?.() ?? null;
+
+    if (!readBy.includes(userId)) {
+      readBy.push(userId);
+    }
+
+    // The sender reading their own message doesn't make it "read" for the chat
+    if (!isRead && userId !== snapshot.get("senderId")) {
+      isRead = true;
+      readAt = new Date();
+    }
+
+    tx.update(messageRef, { readBy: FieldValue.arrayUnion(userId), isRead, readAt });
+
+    return { id: messageRef.id, readBy, isRead, readAt };
+  });
+}
+
+export async function updateLastSeen(
+  chatId: string,
+  userId: string,
+  messageId: string,
+) {
+  const chatRef = firestore.collection("chats").doc(chatId);
+  const messageRef = chatRef.collection("messages").doc(messageId);
+  const lastSeenRef = chatRef.collection("lastSeen").doc(userId);
+
+  return firestore.runTransaction(async (tx) => {
+    const [message, current] = await Promise.all([
+      tx.get(messageRef),
+      tx.get(lastSeenRef),
+    ]);
+
+    if (!message.exists) {
+      return null;
+    }
+
+    const messageCreatedAt: Date | null = message.get("createdAt")?.toDate?.() ?? null;
+    const currentCreatedAt: Date | null = current.get("messageCreatedAt")?.toDate?.() ?? null;
+
+
+    if (
+      current.exists &&
+      currentCreatedAt &&
+      messageCreatedAt &&
+      currentCreatedAt >= messageCreatedAt
+    ) {
       return {
-        id: messageRef.id,
-        isRead: true,
-        readAt: snapshot.get("readAt")?.toDate?.() ?? null,
+        userId,
+        messageId: current.get("messageId") as string,
+        seenAt: current.get("seenAt")?.toDate?.() ?? null,
+        updated: false,
       };
     }
 
-    const readAt = new Date();
-    tx.update(messageRef, { isRead: true, readAt });
+    const seenAt = new Date();
+    tx.set(lastSeenRef, { messageId, messageCreatedAt, seenAt });
 
-    return { id: messageRef.id, isRead: true, readAt };
+    return { userId, messageId, seenAt, updated: true };
   });
 }

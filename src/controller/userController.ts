@@ -7,7 +7,6 @@ import { isUuid } from "../utils/validation.js";
 interface ChatMember {
   id: string;
   name: string;
-  email: string;
 }
 
 interface UserChat {
@@ -50,7 +49,6 @@ export const getUserChats = async (req: Request, res: Response) => {
         updatedAt: chats.updatedAt,
         memberId: users.id,
         memberName: users.name,
-        memberEmail: users.email,
       })
       .from(chats)
       .innerJoin(chatMembers, eq(chatMembers.chatId, chats.id))
@@ -73,10 +71,7 @@ export const getUserChats = async (req: Request, res: Response) => {
         chatsById.set(row.chatId, chat);
       }
 
-      // Only list the other participants; the caller already knows who they are
-      if (row.memberId !== userId) {
-        chat.members.push({ id: row.memberId, name: row.memberName, email: row.memberEmail });
-      }
+      chat.members.push({ id: row.memberId, name: row.memberName });
     }
 
     return res.status(200).json({ chats: [...chatsById.values()] });

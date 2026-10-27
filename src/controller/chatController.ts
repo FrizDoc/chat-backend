@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { chats, chatMembers, users } from "../db/schema.js";
-import { createMessage, getMessages, markMessageRead } from "../services/message.service.js";
+import { createMessage, getMessages, markMessageRead, updateLastSeen } from "../services/message.service.js";
 import { isUuid } from "../utils/validation.js";
 
 export const createOrGetChat = async (req: Request, res: Response) => {
@@ -152,6 +152,7 @@ const FIRESTORE_ID_REGEX = /^[A-Za-z0-9]{1,128}$/;
 export const markChatMessageRead = async (req: Request, res: Response) => {
   try {
     const { chatId, messageId } = req.params;
+    const { userId } = req.body ?? {};
 
     if (!isUuid(chatId)) {
       return res.status(400).json({ message: "The chat id must be a valid UUID!" })
@@ -159,8 +160,21 @@ export const markChatMessageRead = async (req: Request, res: Response) => {
     if (typeof messageId !== "string" || !FIRESTORE_ID_REGEX.test(messageId)) {
       return res.status(400).json({ message: "The message id is invalid!" })
     }
+    if (!isUuid(userId)) {
+      return res.status(400).json({ message: "The user id must be a valid UUID!" })
+    }
 
-    const result = await markMessageRead(chatId, messageId);
+    const [membership] = await db
+      .select({ userId: chatMembers.userId })
+      .from(chatMembers)
+      .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, userId)))
+      .limit(1);
+
+    if (!membership) {
+      return res.status(403).json({ message: "User is not a member of this chat" });
+    }
+
+    const result = await markMessageRead(chatId, messageId, userId);
 
     if (!result) {
       return res.status(404).json({ message: "Message not found" });
@@ -170,5 +184,43 @@ export const markChatMessageRead = async (req: Request, res: Response) => {
   } catch (err) {
     console.error("markChatMessageRead failed", err);
     return res.status(500).json({ message: "Failed to mark message as read" });
+  }
+}
+
+export const updateChatLastSeen = async (req: Request, res: Response) => {
+  try {
+    const chatId = req.params.chatId;
+    const { userId, messageId } = req.body ?? {};
+
+    if (!isUuid(chatId)) {
+      return res.status(400).json({ message: "The chat id must be a valid UUID!" })
+    }
+    if (!isUuid(userId)) {
+      return res.status(400).json({ message: "The user id must be a valid UUID!" })
+    }
+    if (typeof messageId !== "string" || !FIRESTORE_ID_REGEX.test(messageId)) {
+      return res.status(400).json({ message: "The message id is invalid!" })
+    }
+
+    const [membership] = await db
+      .select({ userId: chatMembers.userId })
+      .from(chatMembers)
+      .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, userId)))
+      .limit(1);
+
+    if (!membership) {
+      return res.status(403).json({ message: "User is not a member of this chat" });
+    }
+
+    const result = await updateLastSeen(chatId, userId, messageId);
+
+    if (!result) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error("updateChatLastSeen failed", err);
+    return res.status(500).json({ message: "Failed to update last seen" });
   }
 }
