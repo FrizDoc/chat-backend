@@ -11,7 +11,7 @@ RUN npm run build
 FROM deps AS migrate
 COPY drizzle.config.ts ./
 COPY drizzle ./drizzle
-COPY src/db ./src/db
+COPY src ./src
 CMD ["npm", "run", "db:migrate"]
 
 FROM node:24-alpine AS runtime

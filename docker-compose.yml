@@ -20,17 +20,22 @@ services:
       context: .
       target: migrate
     env_file: .env
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
       DATABASE_URL: postgres://postgres:postgres@db:5432/chat_db
     depends_on:
       db:
         condition: service_healthy
-
   app:
     build:
       context: .
       target: runtime
     env_file: .env
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
       DATABASE_URL: postgres://postgres:postgres@db:5432/chat_db
       PORT: 4000
